@@ -1,0 +1,101 @@
+Reference timer: wall-time calibrated TSC; verified in every reference process
+Reference binary: ./runtasks_ref_linux
+================================================================================
+Running task system grading harness... (11 total tests)
+  - Detected CPU with 20 execution contexts
+  - Task system configured to use at most 20 threads
+================================================================================
+================================================================================
+Executing test: super_super_light...
+Results for: super_super_light
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                3.32      5.382       0.62  (OK)
+[Parallel + Always Spawn]               130.495   131.898     0.99  (OK)
+[Parallel + Thread Pool + Spin]         55.716    32.772      1.70  (NOT OK)
+[Parallel + Thread Pool + Sleep]        3.302     13.159      0.25  (OK)
+================================================================================
+Executing test: super_light...
+Results for: super_light
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                29.339    30.932      0.95  (OK)
+[Parallel + Always Spawn]               127.102   125.549     1.01  (OK)
+[Parallel + Thread Pool + Spin]         49.949    30.374      1.64  (NOT OK)
+[Parallel + Thread Pool + Sleep]        29.393    15.898      1.85  (NOT OK)
+================================================================================
+Executing test: ping_pong_equal...
+Results for: ping_pong_equal
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                477.977   496.332     0.96  (OK)
+[Parallel + Always Spawn]               176.664   178.526     0.99  (OK)
+[Parallel + Thread Pool + Spin]         147.888   122.759     1.20  (NOT OK)
+[Parallel + Thread Pool + Sleep]        486.382   112.837     4.31  (NOT OK)
+================================================================================
+Executing test: ping_pong_unequal...
+Results for: ping_pong_unequal
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                840.152   848.144     0.99  (OK)
+[Parallel + Always Spawn]               244.804   232.815     1.05  (OK)
+[Parallel + Thread Pool + Spin]         266.404   188.81      1.41  (NOT OK)
+[Parallel + Thread Pool + Sleep]        840.275   175.409     4.79  (NOT OK)
+================================================================================
+Executing test: recursive_fibonacci...
+Results for: recursive_fibonacci
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                509.431   1004.309    0.51  (OK)
+[Parallel + Always Spawn]               117.99    170.547     0.69  (OK)
+[Parallel + Thread Pool + Spin]         177.043   199.417     0.89  (OK)
+[Parallel + Thread Pool + Sleep]        510.572   193.701     2.64  (NOT OK)
+================================================================================
+Executing test: math_operations_in_tight_for_loop...
+Results for: math_operations_in_tight_for_loop
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                310.25    304.092     1.02  (OK)
+[Parallel + Always Spawn]               579.506   748.46      0.77  (OK)
+[Parallel + Thread Pool + Spin]         266.719   161.769     1.65  (NOT OK)
+[Parallel + Thread Pool + Sleep]        311.344   130.466     2.39  (NOT OK)
+================================================================================
+Executing test: math_operations_in_tight_for_loop_fewer_tasks...
+Results for: math_operations_in_tight_for_loop_fewer_tasks
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                312.122   286.223     1.09  (OK)
+[Parallel + Always Spawn]               366.172   764.863     0.48  (OK)
+[Parallel + Thread Pool + Spin]         241.983   182.861     1.32  (NOT OK)
+[Parallel + Thread Pool + Sleep]        312.696   151.671     2.06  (NOT OK)
+================================================================================
+Executing test: math_operations_in_tight_for_loop_fan_in...
+Results for: math_operations_in_tight_for_loop_fan_in
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                164.372   147.846     1.11  (OK)
+[Parallel + Always Spawn]               110.121   104.622     1.05  (OK)
+[Parallel + Thread Pool + Spin]         65.75     51.832      1.27  (NOT OK)
+[Parallel + Thread Pool + Sleep]        161.441   45.291      3.56  (NOT OK)
+================================================================================
+Executing test: math_operations_in_tight_for_loop_reduction_tree...
+Results for: math_operations_in_tight_for_loop_reduction_tree
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                160.211   155.056     1.03  (OK)
+[Parallel + Always Spawn]               39.147    47.445      0.83  (OK)
+[Parallel + Thread Pool + Spin]         51.178    43.374      1.18  (OK)
+[Parallel + Thread Pool + Sleep]        160.563   42.758      3.76  (NOT OK)
+================================================================================
+Executing test: spin_between_run_calls...
+Results for: spin_between_run_calls
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                179.379   357.668     0.50  (OK)
+[Parallel + Always Spawn]               105.651   207.027     0.51  (OK)
+[Parallel + Thread Pool + Spin]         236.437   322.838     0.73  (OK)
+[Parallel + Thread Pool + Sleep]        185.597   214.949     0.86  (OK)
+================================================================================
+Executing test: mandelbrot_chunked...
+Results for: mandelbrot_chunked
+                                        STUDENT   REFERENCE   PERF?
+[Serial]                                263.482   264.153     1.00  (OK)
+[Parallel + Always Spawn]               34.609    25.124      1.38  (NOT OK)
+[Parallel + Thread Pool + Spin]         33.773    27.994      1.21  (NOT OK)
+[Parallel + Thread Pool + Sleep]        263.223   24.699      10.66  (NOT OK)
+================================================================================
+Overall performance results
+[Serial]                                : All passed Perf
+[Parallel + Always Spawn]               : Perf did not pass all tests
+[Parallel + Thread Pool + Spin]         : Perf did not pass all tests
+[Parallel + Thread Pool + Sleep]        : Perf did not pass all tests
