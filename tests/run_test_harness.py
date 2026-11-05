@@ -3,23 +3,12 @@ import platform
 import re
 import subprocess
 import multiprocessing
+from pathlib import Path
+import sys
 
 STUDENT_BINARY_NAME = "runtasks"
 
-if platform.system() == 'Darwin':
-    if platform.machine() == "arm64":
-        REFERENCE_BINARY_NAME = "runtasks_ref_osx_arm"
-    else:
-        REFERENCE_BINARY_NAME = "runtasks_ref_osx_x86"
-else:
-    if platform.machine() == "arm64":
-        REFERENCE_BINARY_NAME = "runtasks_ref_linux_arm"
-    else:
-        REFERENCE_BINARY_NAME = "runtasks_ref_linux"
-
 REFERENCE_BINARY_NAME = "runtasks_ref"
-print(REFERENCE_BINARY_NAME)
-print(platform.system(), platform.machine())
 TASKSYS_DEFAULT_NUM_THREADS = multiprocessing.cpu_count()
 UNSPECIFIED_NUM_THREADS = -1
 
@@ -64,7 +53,7 @@ LIST_OF_IMPLEMENTATIONS = [
 def run_test(cmd, is_reference):
     runtimes = {}
     try:
-        output = subprocess.check_output(cmd, shell=True).decode('utf-8')
+        output = subprocess.check_output(cmd, text=True)
         for line in output.split('\n'):
             m = re.match(r'\[(.*)\]:\s+\[(\d+\.\d+)\] ms', line)
             if m is not None:
@@ -75,9 +64,15 @@ def run_test(cmd, is_reference):
                     implementation = "STUDENT [%s]" % implementation
                 runtime = float(m.group(2))
                 runtimes[implementation] = [runtime]
-    except Exception as e:
-        print(e)
-        print("%s solution failed correctness check!" % ("REFERENCE" if is_reference else "STUDENT"))
+        expected = {("REFERENCE " if is_reference else "STUDENT ") + impl
+                    for impl in LIST_OF_IMPLEMENTATIONS}
+        if set(runtimes) != expected:
+            raise RuntimeError("missing implementation timings")
+    except (subprocess.SubprocessError, RuntimeError) as e:
+        if isinstance(e, subprocess.CalledProcessError) and e.output:
+            print(e.output, end='')
+        raise SystemExit("%s benchmark failed: %s" %
+                         ("REFERENCE" if is_reference else "STUDENT", e))
     return runtimes
 
 def pretty_print(test_name, runtimes):
@@ -120,13 +115,35 @@ if __name__ == '__main__':
                         default=TASKSYS_DEFAULT_NUM_THREADS,
                         help="Max number of threads that the task system can use. (%d by default)" % TASKSYS_DEFAULT_NUM_THREADS)
     parser.add_argument('-t', '--test_names', type=str, nargs='+',
+                        choices=[x[0] for x in LIST_OF_TESTS],
                         default=[x[0] for x in LIST_OF_TESTS],
                         help='List of tests to run: %s' % ", ".join([
                             x[0] for x in LIST_OF_TESTS]))
     parser.add_argument('-a', '--run_async', action='store_true',
                         help='Run async tests')
+    parser.add_argument('--runs', type=int, default=NUM_TEST_RUNS,
+                        help='Number of separate processes per test (default: 5)')
+    parser.add_argument('--iterations', type=int, default=3,
+                        help='Timing iterations in each process (default: 3)')
+    parser.add_argument('--raw-reference', action='store_true',
+                        help='Use the original uncalibrated reference timer (diagnostics only)')
 
     args = parser.parse_args()
+    if args.num_threads < 1 or args.runs < 1 or args.iterations < 1:
+        parser.error('threads, runs, and iterations must be positive')
+
+    if platform.system() == 'Darwin':
+        suffix = 'osx_arm' if platform.machine() == 'arm64' else 'osx_x86'
+    else:
+        suffix = 'linux_arm' if platform.machine() in ('arm64', 'aarch64') else 'linux'
+    reference_binary = './%s_%s' % (REFERENCE_BINARY_NAME, suffix)
+    ref_cmd = [reference_binary]
+    if platform.system() == 'Linux' and platform.machine() == 'x86_64' and not args.raw_reference:
+        ref_cmd = [sys.executable, str(Path(__file__).resolve().with_name('run_reference.py')),
+                   reference_binary]
+        print('Reference timer: wall-time calibrated TSC; verified in every reference process', flush=True)
+    print('Reference binary: %s' % reference_binary, flush=True)
+    student_cmd = ['./' + STUDENT_BINARY_NAME]
 
     test_names_and_num_threads = []
 
@@ -163,31 +180,14 @@ if __name__ == '__main__':
               "=================")
         print("Executing test: %s..." %  test_name)
 
-        # Use the right binary for OSX / Linux
-        if platform.system() == 'Darwin':
-            # distinguish x86 and ARM
-            if platform.machine() == "arm64":
-                print("Reference binary: ./runtasks_ref_osx_arm")
-                ref_cmd = "./%s_osx_arm -n %d" % (REFERENCE_BINARY_NAME, num_threads);
-            else:
-                print("Reference binary: ./runtasks_ref_osx_x86")
-                ref_cmd = "./%s_osx_x86 -n %d" % (REFERENCE_BINARY_NAME, num_threads);
-        else:
-            if platform.machine() == "aarch64":
-                print("Reference binary: ./runtasks_ref_linux_arm")
-                ref_cmd = "./%s_linux_arm -n %d" % (REFERENCE_BINARY_NAME, num_threads);
-            else:
-                print("Reference binary: ./runtasks_ref_linux")
-                ref_cmd = "./%s_linux -n %d" % (REFERENCE_BINARY_NAME, num_threads);
-        student_cmd = "./%s -n %d" % (STUDENT_BINARY_NAME, num_threads);
-
-        cmds = [ref_cmd, student_cmd]
+        # Keep per-test thread counts supported by LIST_OF_TESTS.
+        timing_args = ['-n', str(num_threads), '-i', str(args.iterations)]
+        cmds = [ref_cmd + timing_args, student_cmd + timing_args]
         is_references = [True, False]
         all_runtimes = {}
-        for i in range(NUM_TEST_RUNS):
+        for i in range(args.runs):
             for (cmd, is_reference) in zip(cmds, is_references):
-                cmd = "%s %s" % (cmd, test_name)
-                runtimes = run_test(cmd, is_reference=is_reference)
+                runtimes = run_test(cmd + [test_name], is_reference=is_reference)
                 for key in runtimes:
                     if key not in all_runtimes:
                         all_runtimes[key] = []

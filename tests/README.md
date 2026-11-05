@@ -2,6 +2,54 @@
 This readme is a description of the tests included in the test harness (`run_test_harness.py`). There are additional tests defined in `tests.h` and listed in the `main` function of `main.cpp`. Those tests can be run directly through the
 `../part_*/runtasks` binary.
 
+## 本地 Linux x86-64 的可靠 ref 计时 ##
+
+原始 x86 ref 使用 `rdtsc`，却按 `/proc/cpuinfo` 的动态 CPU MHz 换算秒数。
+当前学生代码的 `CycleTimer.h` 已改用 `steady_clock`，两者直接比较可能严重失真。
+本目录的 harness 现在默认通过 `run_reference.py` 启动 Linux x86-64 ref。
+原始 ref 文件保持不变，直接执行 `./runtasks_ref_linux` 仍会使用旧计时器。
+
+在 `part_a/` 或 `part_b/` 中运行：
+
+```sh
+# 检查当前机器上的校准与独立时间验证（无需编译学生代码）。
+python3 ../tests/run_reference.py --check ./runtasks_ref_linux
+
+# 单独运行校准后的 ref，原有 ref 参数照常传入。
+python3 ../tests/run_reference.py ./runtasks_ref_linux -n 4 -i 3 super_light
+
+# 正常比较：Linux x86-64 会自动校准 ref，默认每个测试跑 5 个进程，
+# 每个进程测 3 次，最终取最短时间。
+make
+python3 ../tests/run_test_harness.py -n 4
+
+# 快速运行指定测试。
+python3 ../tests/run_test_harness.py -n 4 --runs 1 --iterations 2 \
+    -t super_super_light super_light math_operations_in_tight_for_loop
+```
+
+首次运行需要 `gcc` 和 `nm`（binutils），会自动在忽略的 `.ref_timer/` 目录编译
+一个小型 `LD_PRELOAD` 库。它通过 ELF 符号定位 ref 的计时器，在 `main()` 前：
+
+1. 检查 invariant TSC、RDTSCP，以及 Linux 当前使用的 `tsc` clocksource。
+2. 临时固定主线程的 CPU，用 `CLOCK_MONOTONIC_RAW` 测量 5 次 TSC 频率，取中位数。
+3. 设置 ref 原有计时器缓存的换算系数，调用 ref 的真实计时器函数，
+   再以独立的 50 ms 区间验证误差不超过 0.5%，恢复原有 CPU 亲和性后运行测试。
+
+校准在每个 ref 进程启动时执行，不计入测试时间。符号不匹配、时钟不可靠或验证失败
+都会以非零状态退出；harness 不会把失败或缺失的测量报告成通过。
+`--raw-reference` 仅用于诊断时对照旧结果。
+
+这是本地性能基准：ref 的调度算法、任务计算代码和编译器产物均保留，
+因此修正计时后仍可能存在 GCC 版本导致的任务计算速度差异，不能保证串行结果相同。
+120% / 150% 的阈值沿用原脚本，不能据此保证其他机器的评分。
+测量时尽量保持电源模式一致、减少后台负载；可用 `taskset -c 0-3 python3
+../tests/run_test_harness.py -n 4` 让两边都使用同一组 CPU（CPU 编号按本机选择）。
+ARM / macOS 维持原来的启动方式，此修复只用于 Linux x86-64。
+
+验证修复：在仓库根目录运行
+`python3 -m unittest discover -s tests -p 'test_reference_timer.py'`。
+
 ## SuperSuperLight ##
 This test allocates two buffers of size 2^15 elements each and then simply copies elements from one buffer to the other buffer, reversing the order of the copy in each iteration. There are 64 tasks and 400 bulk task launches.
 
