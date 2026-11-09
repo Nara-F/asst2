@@ -32,6 +32,8 @@ class TaskSystemSerial : public ITaskSystem {
 class TaskSystemParallelSpawn : public ITaskSystem {
    public:
     int num_threads;
+    std::mutex task_id_mutex;
+    TaskID curTask;
     TaskSystemParallelSpawn(int num_threads);
     ~TaskSystemParallelSpawn();
     const char* name();
@@ -51,16 +53,18 @@ class TaskSystemParallelThreadPoolSpinning : public ITaskSystem {
    public:
     TaskSystemParallelThreadPoolSpinning(int num_threads);
     ~TaskSystemParallelThreadPoolSpinning();
-
+    std::vector<std::mutex> work_queues_mutexs;
+    std::mutex task_id_mutex;
+    std::mutex finish_mutex;
+    int finish_count = 0;
+    TaskID curTask;
     struct Task {
         IRunnable* runnable;
         int num_total_tasks;
-        int start;
     };
     int num_threads;
     std::vector<std::thread> threads;
-    std::vector<std::queue<Task>> work_queues;
-    std::mutex work_queues_mutex;
+    std::vector<Task> work_queues;
     const char* name();
     void run(IRunnable* runnable, int num_total_tasks);
     TaskID runAsyncWithDeps(IRunnable* runnable, int num_total_tasks,
