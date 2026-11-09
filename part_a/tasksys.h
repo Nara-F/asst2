@@ -1,6 +1,7 @@
 #ifndef _TASKSYS_H
 #define _TASKSYS_H
 
+#include <condition_variable>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -82,6 +83,19 @@ class TaskSystemParallelThreadPoolSleeping : public ITaskSystem {
    public:
     TaskSystemParallelThreadPoolSleeping(int num_threads);
     ~TaskSystemParallelThreadPoolSleeping();
+    std::vector<std::mutex> work_queues_mutexs;
+    std::vector<std::condition_variable> cv;
+    std::mutex task_id_mutex;
+    std::mutex finish_mutex;
+    int finish_count = 0;
+    TaskID curTask;
+    struct Task {
+        IRunnable* runnable;
+        int num_total_tasks;
+    };
+    int num_threads;
+    std::vector<std::thread> threads;
+    std::vector<Task> work_queues;
     const char* name();
     void run(IRunnable* runnable, int num_total_tasks);
     TaskID runAsyncWithDeps(IRunnable* runnable, int num_total_tasks,
