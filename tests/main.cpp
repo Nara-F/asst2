@@ -17,6 +17,7 @@ void usage(const char* progname, std::string *testnames, int num_tests) {
     printf("  -n  --num_threads  <INT>      Number of threads: <INT> (default=%d)\n", DEFAULT_NUM_THREADS);
     printf("  -i  --num_timing_iterations <INT> Number of timing iterations: <INT> (default=%d)\n", DEFAULT_NUM_TIMING_ITERATIONS);
     printf("  -?  --help                    This message\n");
+    printf("  -s  --sleep-only              Run only the sleeping thread pool\n");
     printf("Valid testnames are:");
     for(int i = 0; i < num_tests; i++) {
         printf(" %s%c", testnames[i].c_str(), (char)((i+1 == num_tests) ? '\n' : ','));
@@ -119,15 +120,20 @@ int main(int argc, char** argv)
  
     // Parse commandline options
     int opt;
+    bool sleep_only = false;
     static struct option long_options[] = {
         {"num_threads",           1, 0,  'n'},
         {"num_timing_iterations", 1, 0,  'i'},
         {"help",                  0, 0,  '?'},
+        {"sleep-only",            0, 0,  's'},
     };
 
-    while ((opt = getopt_long(argc, argv, "n:i:?", long_options, NULL)) != EOF) {
+    while ((opt = getopt_long(argc, argv, "n:i:s?", long_options, NULL)) != EOF) {
 
         switch (opt) {
+        case 's':
+            sleep_only = true;
+            break;
         case 'n':
             num_threads = atoi(optarg);
             break;
@@ -163,6 +169,9 @@ int main(int argc, char** argv)
                "======================\n");
 
         for (int i = 0; i < N_TASKSYS_IMPLS; i++) {
+            if (sleep_only && i != PARALLEL_THREAD_POOL_SLEEPING) {
+                continue;
+            }
             double minT = 1e30;
             for (int j = 0; j < num_timing_iterations; j++) {
 

@@ -1,6 +1,7 @@
 #ifndef _TASKSYS_H
 #define _TASKSYS_H
 
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -70,16 +71,32 @@ class TaskSystemParallelThreadPoolSleeping : public ITaskSystem {
    public:
     struct Task {
         IRunnable* runnable;
-        int task_id;
+        int task_idx;
         int num_total_tasks;
+        int task_id;
+    };
+    struct PendingTask {
+        IRunnable* runnable;
+        int num_total_tasks;
+        std::vector<TaskID> deps;
+        TaskID task_id;
     };
 
     int num_threads;
+    TaskID curTask;
+    std::mutex task_mutex;
+    std::vector<int> task_remaining;
     std::deque<Task> task_queue;
     std::mutex queue_mutex;
     std::vector<std::thread> threads;
+
+    std::mutex set_mutex;
     std::unordered_set<TaskID> finished_tasks;
 
+    std::mutex pending_set_mutex;
+    std::vector<PendingTask> pending_tasks;
+
+    // Zero-task batches count as one until their dependencies are satisfied.
     int pending_task_count = 0;
     std::mutex finished_task_mutex;
     std::condition_variable finished_task_cv;
@@ -93,6 +110,7 @@ class TaskSystemParallelThreadPoolSleeping : public ITaskSystem {
     TaskSystemParallelThreadPoolSleeping(int num_threads);
     ~TaskSystemParallelThreadPoolSleeping();
     const char* name();
+    bool insertingTask(PendingTask& task);
     void run(IRunnable* runnable, int num_total_tasks);
     TaskID runAsyncWithDeps(IRunnable* runnable, int num_total_tasks,
                             const std::vector<TaskID>& deps);

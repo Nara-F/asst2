@@ -1,5 +1,7 @@
 #include "tasksys.h"
 
+#include <algorithm>
+
 IRunnable::~IRunnable() {}
 
 ITaskSystem::ITaskSystem(int num_threads) {}
@@ -139,6 +141,7 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(
     : ITaskSystem(num_threads),
       status_mutex(std::max(num_threads - 1, 1)),
       cv(std::max(num_threads - 1, 1)) {
+    curTask = 0;
     this->num_threads =
         std::max(num_threads - 1, 1);  // preventing block of main thread
     threads.resize(this->num_threads);
@@ -166,10 +169,38 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(
                                     status_mutex[idx]);
                                 if (status_call[idx] == 1) status_call[idx] = 0;
                             }
+                            {
+                                std::lock_guard<std::mutex> lock(
+                                    finished_task_mutex);
+                                if (pending_task_count == 0) {
+                                    finished_task_cv.notify_all();
+                                }
+                            }
                             break;
                         }
                     }
-                    task.runnable->runTask(task.task_id, task.num_total_tasks);
+                    task.runnable->runTask(task.task_idx, task.num_total_tasks);
+                    bool batch_finished;
+                    {
+                        std::lock_guard<std::mutex> lock(task_mutex);
+                        batch_finished = --task_remaining[task.task_id] == 0;
+                    }
+                    if (batch_finished) {
+                        {
+                            std::lock_guard<std::mutex> lock(set_mutex);
+                            finished_tasks.insert(task.task_id);
+                        }
+                        {
+                            std::lock_guard<std::mutex> lock(pending_set_mutex);
+                            for (auto it = pending_tasks.begin();
+                                 it != pending_tasks.end();) {
+                                if (insertingTask(*it))
+                                    it = pending_tasks.erase(it);
+                                else
+                                    ++it;
+                            }
+                        }
+                    }
                     {
                         std::lock_guard<std::mutex> lock(finished_task_mutex);
                         if (--pending_task_count == 0) {
@@ -199,6 +230,46 @@ TaskSystemParallelThreadPoolSleeping::~TaskSystemParallelThreadPoolSleeping() {
     }
 }
 
+bool TaskSystemParallelThreadPoolSleeping::insertingTask(PendingTask& task) {
+    auto& runnable = task.runnable;
+    auto& num_total_tasks = task.num_total_tasks;
+    auto& deps = task.deps;
+    auto& task_id = task.task_id;
+    bool deps_completed = true;
+    for (auto dep : deps) {
+        std::lock_guard<std::mutex> lock(set_mutex);
+        if (!finished_tasks.count(dep)) {
+            deps_completed = false;
+            break;
+        }
+    }
+    if (deps_completed) {
+        if (num_total_tasks == 0) {
+            {
+                std::lock_guard<std::mutex> lock(set_mutex);
+                finished_tasks.insert(task_id);
+            }
+            {
+                std::lock_guard<std::mutex> lock(finished_task_mutex);
+                if (--pending_task_count == 0) {
+                    finished_task_cv.notify_all();
+                }
+            }
+            return true;
+        }
+        for (int i = 0; i < num_total_tasks; i++) {
+            std::lock_guard<std::mutex> lock(queue_mutex);
+            task_queue.push_back(Task{runnable, i, num_total_tasks, task_id});
+        }
+        for (int i = 0; i < num_threads; i++) {
+            std::unique_lock<std::mutex> lock(status_mutex[i]);
+            status_call[i] = 1;
+            cv[i].notify_all();
+        }
+        return true;
+    }
+    return false;
+}
 void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable,
                                                int num_total_tasks) {
     runAsyncWithDeps(runnable, num_total_tasks, {});
@@ -210,35 +281,24 @@ TaskID TaskSystemParallelThreadPoolSleeping::runAsyncWithDeps(
     //
     // TODO: CS149 students will implement this method in Part B.
     //
-    bool deps_completed = true;
-    for (auto dep : deps) {
-        if (!finished_tasks.count(dep)) {
-            deps_completed = false;
-            break;
-        }
-    }
+    TaskID task_id;
     {
-        std::lock_guard<std::mutex> lock(finished_task_mutex);
-        pending_task_count += num_total_tasks;
-    }
-    if (deps_completed) {
-        for (int i = 0; i < num_total_tasks; i++) {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            task_queue.push_front(Task{runnable, i, num_total_tasks});
-        }
-    } else {
-        for (int i = 0; i < num_total_tasks; i++) {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            task_queue.push_back(Task{runnable, i, num_total_tasks});
-        }
-    }
-    for (int i = 0; i < num_threads; i++) {
-        std::unique_lock<std::mutex> lock(status_mutex[i]);
-        status_call[i] = 1;
-        cv[i].notify_all();
+        std::lock_guard<std::mutex> lock(task_mutex);
+        task_id = curTask++;
+        task_remaining.push_back(num_total_tasks);
     }
 
-    return 0;
+    {
+        std::lock_guard<std::mutex> lock(finished_task_mutex);
+        pending_task_count += num_total_tasks == 0 ? 1 : num_total_tasks;
+    }
+    std::unique_lock<std::mutex> lockP(pending_set_mutex);
+    PendingTask task{runnable, num_total_tasks, deps, task_id};
+    if (!insertingTask(task)) {
+        pending_tasks.push_back(task);
+    }
+
+    return task_id;
 }
 
 void TaskSystemParallelThreadPoolSleeping::sync() {
